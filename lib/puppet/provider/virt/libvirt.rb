@@ -17,8 +17,36 @@ Puppet::Type.type(:virt).provide(:libvirt) do
   defaultfor :virtual => ["kvm", "physical", "xenu"]
 
   def self.instances
-    # TODO
-    []
+    conn = Libvirt::open(hypervisor)
+
+    # get running instances from libvirt
+    active_domains  = conn.list_domains.map { |it| conn.lookup_domain_by_id(it).name }
+
+    # get present instances from libvirt
+    defined_domains = conn.list_defined_domains
+
+    all_domains = active_domains + defined_domains
+    all_domains.sort.each { |x|
+      it = conn.lookup_domain_by_name(x)
+
+      new (
+        :name       => it.name,
+        :memory     => (it.info.max_mem / 1024),
+        :cpus       => it.info.nr_virt_cpu,
+        :ensure     => case it.info.state
+        when 0
+          :installed
+        when 1
+          :running
+        when 3
+          :suspended
+        when 5
+          :stopped
+        when 7
+          :suspended
+        end
+      )
+    }
   end
 
   def hypervisor
